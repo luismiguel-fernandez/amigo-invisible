@@ -130,6 +130,24 @@ CREATE POLICY "Students can view their own assignment"
 ON secret_santa_assignments FOR SELECT 
 USING (true);
 
+-- Permitir que los profesores actualicen las asignaciones de sus salas
+CREATE POLICY "Teachers can update assignments for their rooms" 
+ON secret_santa_assignments FOR UPDATE 
+USING (
+  EXISTS (
+    SELECT 1 FROM rooms 
+    WHERE rooms.id = secret_santa_assignments.room_id 
+    AND rooms.teacher_id = auth.uid()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM rooms 
+    WHERE rooms.id = secret_santa_assignments.room_id 
+    AND rooms.teacher_id = auth.uid()
+  )
+);
+
 -- 6. Crear índices para mejorar el rendimiento
 CREATE INDEX idx_rooms_code ON rooms(code);
 CREATE INDEX idx_rooms_teacher ON rooms(teacher_id);

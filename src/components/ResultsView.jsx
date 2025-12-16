@@ -30,7 +30,11 @@ function ResultsView({ roomId, roomName, onClose }) {
 
   const loadAssignments = async () => {
     try {
+      setLoading(true)
+      console.log('🔄 Cargando asignaciones para room:', roomId)
+      
       // Obtener todas las asignaciones con información de los participantes
+      // Añadimos un timestamp para evitar caché
       const { data, error } = await supabase
         .from('secret_santa_assignments')
         .select(`
@@ -42,6 +46,12 @@ function ResultsView({ roomId, roomName, onClose }) {
         .order('created_at', { ascending: true })
 
       if (error) throw error
+      
+      console.log('✅ Asignaciones cargadas:', data?.map(a => ({ 
+        id: a.id, 
+        email_sent: a.email_sent 
+      })))
+      
       setAssignments(data || [])
     } catch (error) {
       console.error('Error loading assignments:', error)

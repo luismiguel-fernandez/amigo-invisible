@@ -97,9 +97,27 @@ serve(async (req) => {
       )
     }
 
-    console.log('Email enviado con éxito a:', giverEmail)
+    // Verificar que Resend devolvió un ID de email (confirmación de envío)
+    if (!data || !data.id) {
+      console.error('Resend no devolvió un ID de email para:', giverEmail)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Resend no confirmó el envío del email',
+          email: giverEmail,
+          resendData: data
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+
+    console.log('Email enviado con éxito a:', giverEmail, 'ID:', data.id)
     return new Response(
-      JSON.stringify({ success: true, data }),
+      JSON.stringify({ 
+        success: true, 
+        data,
+        emailId: data.id
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error: any) {

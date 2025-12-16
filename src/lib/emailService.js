@@ -26,9 +26,24 @@ export const sendSecretSantaEmail = async (giverName, giverEmail, receiverName, 
       }
     }
 
-    if (data && data.success) {
-      console.log(`✅ Email enviado exitosamente a: ${giverEmail}`)
-      return { success: true, data: data.data, email: giverEmail }
+    if (data && data.success && data.emailId) {
+      // Verificar que Resend devolvió un ID de email
+      console.log(`✅ Email enviado exitosamente a: ${giverEmail} (ID: ${data.emailId})`)
+      return { 
+        success: true, 
+        data: data.data, 
+        emailId: data.emailId,
+        email: giverEmail 
+      }
+    } else if (data && data.success) {
+      // Success sin emailId (caso extraño, pero lo marcamos como warning)
+      console.warn(`⚠️ Email aparentemente enviado a ${giverEmail} pero sin ID de confirmación`)
+      return { 
+        success: true, 
+        data: data.data, 
+        email: giverEmail,
+        warning: 'Sin ID de confirmación de Resend'
+      }
     } else {
       console.error(`❌ Error en respuesta para ${giverEmail}:`, data)
       return { 

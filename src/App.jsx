@@ -440,39 +440,59 @@ function App() {
       
       }
 
-      // Guardar asignaciones
+      // Guardar asignaciones y obtener los IDs insertados
       const assignments = participants.map((giver, index) => ({
         room_id: currentRoom.id,
         giver_id: giver.id,
         receiver_id: shuffled[index].id
       }))
 
-      const { error } = await supabase
+      const { data: insertedAssignments, error } = await supabase
         .from('secret_santa_assignments')
         .insert(assignments)
+        .select()
 
       if (error) throw error
 
       // Enviar emails usando Resend y actualizar el estado en la BD
       const emailResults = await sendEmails(participants, shuffled)
       
-      // Actualizar el campo email_sent en las asignaciones
-      for (let i = 0; i < participants.length; i++) {
+      // Actualizar el campo email_sent en las asignaciones usando el ID
+      const updatePromises = insertedAssignments.map(async (assignment, i) => {
         const emailSent = emailResults[i]?.emailSent || false
+        const assignmentId = assignment.id
         
-        await supabase
+        console.log(`📝 Intentando actualizar asignación ${assignmentId}: email_sent = ${emailSent}`)
+        
+        const { data: updateData, error: updateError } = await supabase
           .from('secret_santa_assignments')
           .update({ email_sent: emailSent })
-          .eq('room_id', currentRoom.id)
-          .eq('giver_id', participants[i].id)
-          .eq('receiver_id', shuffled[i].id)
-      }
+          .eq('id', assignmentId)
+          .select()
+        
+        if (updateError) {
+          console.error(`❌ Error actualizando email_sent para asignación ${assignmentId}:`, updateError)
+        } else if (updateData && updateData.length > 0) {
+          console.log(`✅ Asignación ${assignmentId} actualizada correctamente:`, updateData[0].email_sent)
+        } else {
+          console.warn(`⚠️ Update sin error pero sin datos devueltos para ${assignmentId}`)
+        }
+        
+        return { assignmentId, emailSent, success: !updateError, data: updateData }
+      })
+      
+      // Esperar a que todas las actualizaciones se completen
+      const updateResults = await Promise.all(updatePromises)
+      console.log('📊 Resumen de actualizaciones:', updateResults)
 
       // Marcar como completado
       await supabase
         .from('rooms')
         .update({ status: 'completed' })
         .eq('id', currentRoom.id)
+      
+      // Pequeña pausa para asegurar que la BD esté sincronizada
+      await new Promise(resolve => setTimeout(resolve, 500))
 
       alert('¡Sorteo completado! Los emails han sido enviados.')
     } catch (error) {
