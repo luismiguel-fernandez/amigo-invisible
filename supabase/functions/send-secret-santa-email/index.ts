@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { Resend } from 'npm:resend@2.0.0'
+import nodemailer from 'npm:nodemailer@7.0.11'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,17 +27,33 @@ serve(async (req) => {
       )
     }
 
-    // Verificar que tenemos la API key
-    const apiKey = Deno.env.get('RESEND_API_KEY')
-    if (!apiKey) {
+    // Obtener configuración de Nodemailer desde variables de entorno
+    const emailUser = Deno.env.get('NODEMAILER_EMAIL_USER')
+    const emailPassword = Deno.env.get('NODEMAILER_EMAIL_PASSWORD')
+    const emailHost = Deno.env.get('NODEMAILER_EMAIL_HOST') || 'smtp.gmail.com'
+    const emailPort = parseInt(Deno.env.get('NODEMAILER_EMAIL_PORT') || '587')
+    const emailFrom = Deno.env.get('NODEMAILER_EMAIL_FROM') || emailUser
+
+    if (!emailUser || !emailPassword) {
       return new Response(
-        JSON.stringify({ success: false, error: 'RESEND_API_KEY no configurada en Supabase' }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Configuración de Nodemailer no disponible en Supabase' 
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
 
-    // Inicializar Resend
-    const resend = new Resend(apiKey)
+    // Crear el transporte de Nodemailer
+    const transporter = nodemailer.createTransport({
+      host: emailHost,
+      port: emailPort,
+      secure: emailPort === 465,
+      auth: {
+        user: emailUser,
+        pass: emailPassword
+      }
+    })
 
     // HTML del email
     const html = `
@@ -77,53 +93,30 @@ serve(async (req) => {
     `
 
     // Enviar email
-    const { data, error } = await resend.emails.send({
-      from: 'Amigo Invisible <onboarding@resend.dev>',
-      to: [giverEmail],
+    const info = await transporter.sendMail({
+      from: emailFrom,
+      to: giverEmail,
       subject: `🎁 Tu Amigo Invisible - ${roomName}`,
       html: html,
     })
 
-    if (error) {
-      console.error('Error de Resend:', error)
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: error.message || 'Error al enviar email',
-          resendError: error,
-          email: giverEmail
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      )
-    }
-
-    // Verificar que Resend devolvió un ID de email (confirmación de envío)
-    if (!data || !data.id) {
-      console.error('Resend no devolvió un ID de email para:', giverEmail)
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Resend no confirmó el envío del email',
-          email: giverEmail,
-          resendData: data
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      )
-    }
-
-    console.log('Email enviado con éxito a:', giverEmail, 'ID:', data.id)
+    console.log('Email enviado con éxito a:', giverEmail, 'ID:', info.messageId)
     return new Response(
       JSON.stringify({ 
         success: true, 
-        data,
-        emailId: data.id
+        data: info,
+        emailId: info.messageId
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error: any) {
     console.error('Error en Edge Function:', error)
     return new Response(
-      JSON.stringify({ success: false, error: error?.message || 'Error desconocido', details: String(error) }),
+      JSON.stringify({ 
+        success: false, 
+        error: error?.message || 'Error desconocido', 
+        details: String(error) 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }

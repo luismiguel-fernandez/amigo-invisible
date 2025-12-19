@@ -1,58 +1,36 @@
-import { supabase } from './supabase'
+import nodemailer from 'nodemailer'
+import { getNodemailerTransporter, getSecretSantaEmailTemplate } from './nodemailerConfig'
 
 /**
  * Envía un email a un participante con su amigo invisible asignado
- * Usa Supabase Edge Function para evitar problemas de CORS
+ * Usa Nodemailer para el envío de correos
  */
 export const sendSecretSantaEmail = async (giverName, giverEmail, receiverName, roomName, receiverPreferences = null) => {
   try {
-    // Llamar a la Edge Function de Supabase que maneja el envío con Resend
-    const { data, error } = await supabase.functions.invoke('send-secret-santa-email', {
-      body: {
-        giverName,
-        giverEmail,
-        receiverName,
-        roomName,
-        receiverPreferences
-      }
-    })
+    // Obtener el transporte configurado
+    const transporterConfig = getNodemailerTransporter()
+    const transporter = nodemailer.createTransport(transporterConfig)
 
-    if (error) {
-      console.error(`❌ Error enviando email a ${giverEmail}:`, error)
-      return { 
-        success: false, 
-        error: error.message,
-        email: giverEmail 
-      }
+    // Generar el HTML del email
+    const html = getSecretSantaEmailTemplate(giverName, receiverName, roomName, receiverPreferences)
+
+    // Configurar el email
+    const mailOptions = {
+      from: import.meta.env.VITE_EMAIL_FROM || import.meta.env.VITE_EMAIL_USER,
+      to: giverEmail,
+      subject: `🎁 Tu Amigo Invisible - ${roomName}`,
+      html: html
     }
 
-    if (data && data.success && data.emailId) {
-      // Verificar que Resend devolvió un ID de email
-      console.log(`✅ Email enviado exitosamente a: ${giverEmail} (ID: ${data.emailId})`)
-      return { 
-        success: true, 
-        data: data.data, 
-        emailId: data.emailId,
-        email: giverEmail 
-      }
-    } else if (data && data.success) {
-      // Success sin emailId (caso extraño, pero lo marcamos como warning)
-      console.warn(`⚠️ Email aparentemente enviado a ${giverEmail} pero sin ID de confirmación`)
-      return { 
-        success: true, 
-        data: data.data, 
-        email: giverEmail,
-        warning: 'Sin ID de confirmación de Resend'
-      }
-    } else {
-      console.error(`❌ Error en respuesta para ${giverEmail}:`, data)
-      return { 
-        success: false, 
-        error: data?.error || 'Error desconocido',
-        resendError: data?.resendError,
-        details: data?.details,
-        email: giverEmail 
-      }
+    // Enviar email
+    const info = await transporter.sendMail(mailOptions)
+
+    console.log(`✅ Email enviado exitosamente a: ${giverEmail} (ID: ${info.messageId})`)
+    return { 
+      success: true, 
+      data: info,
+      emailId: info.messageId,
+      email: giverEmail 
     }
   } catch (error) {
     console.error(`❌ Error en sendSecretSantaEmail para ${giverEmail}:`, error)
